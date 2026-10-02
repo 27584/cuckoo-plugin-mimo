@@ -1,0 +1,8 @@
+{
+  "id": "mimo",
+  "name": "小米 MiMo",
+  "version": "1.0.0",
+  "description": "为 Cuckoo Code 增加小米 MiMo Studio（aistudio.xiaomimimo.com）平台支持：SSE 流式回复与思考解析、会话列表、暂停、原生 Enter 发送、附件上传。",
+  "author": "wangyongpeng90",
+  "minAppVersion": "0.8.7"
+}
