@@ -97,10 +97,51 @@ module.exports = {
   },
 
   /**
+   * 发送前向输入框追加一条工具格式提醒。
+   * mimo 对会话级 system prompt 记忆很差，只有每轮发送都提醒才会遵守"禁止 XML invoke"。
+   * 追加内容不进 harness 对话流（harness 气泡显示用户原始输入），只在 AI 网页输入框里可见。
+   * 幂等：同一轮内已含 [系统提示] 则不重复追加；站点每次发送后清空输入框，不累积。
+   */
+  _appendReminder(input) {
+    var REMINDER = '\n\n[系统提示] 调用工具只能使用 cuckoo 代码块（三个反引号 + cuckoo 围栏），禁止 XML invoke 或 JSON 格式，代码块外不要有任何文字。';
+    try {
+      if (!input) return;
+      var tag = String(input.tagName || '').toUpperCase();
+      if (tag === 'TEXTAREA' || tag === 'INPUT') {
+        var cur = String(input.value || '');
+        if (cur.indexOf('[系统提示]') !== -1) return;
+        var proto = tag === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        var desc = Object.getOwnPropertyDescriptor(proto, 'value');
+        if (!desc || !desc.set) return;
+        desc.set.call(input, cur + REMINDER);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+      if (input.isContentEditable || input.getAttribute('contenteditable') === 'true') {
+        var txt = String(input.innerText || input.textContent || '');
+        if (txt.indexOf('[系统提示]') !== -1) return;
+        input.focus();
+        try {
+          var sel = window.getSelection();
+          var range = document.createRange();
+          range.selectNodeContents(input);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (_) { /* ignore */ }
+        var dt = new DataTransfer();
+        dt.setData('text/plain', REMINDER);
+        input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+      }
+    } catch (_) { /* 追加失败不阻断发送 */ }
+  },
+
+  /**
    * 发送触发：SPA 普遍免疫合成点击，优先经主进程注入原生 Enter（isTrusted=true），
    * 失败再回退点击发送按钮。
    */
   async triggerSend(input) {
+    try { this._appendReminder(input); } catch (_) { /* 追加失败不阻断发送 */ }
     try {
       if (window.electronAPI && typeof window.electronAPI.sendEnterToChat === 'function') {
         await window.electronAPI.sendEnterToChat();
